@@ -125,7 +125,7 @@ class AttentionLayer(torch.nn.Module):
         assert isinstance(x, torch.Tensor), "Input must be a torch.Tensor"
         assert x.shape[-1] == self.d_model, f"Expected last dimension of size {self.d_model}, got {x.shape[-1]}"
         assert x.dim() >= 2, "Input must have at least 2 dimensions"
-        assert past is not None and isinstance(past, torch.Tensor), "past must be a torch.Tensor"
+        # assert past is not None and isinstance(past, torch.Tensor), "past must be a torch.Tensor"
 
         c = self.c_attn(x)
         # print('forward c:', c)
@@ -188,7 +188,7 @@ class AttentionBlock(torch.nn.Module):
 
     def forward(self, x: torch.Tensor, past: torch.Tensor=None):
         assert isinstance(x, torch.Tensor), "Input must be a torch.Tensor"
-        assert past is not None and isinstance(past, torch.Tensor), "past must be a torch.Tensor"
+        # assert past is not None and isinstance(past, torch.Tensor), "past must be a torch.Tensor"
         a, present = self.attn(self.ln_1(x), past)
         print('AttentionBlock x:', x.shape)
         print('AttentionBlock a:', a.shape)
@@ -198,9 +198,9 @@ class AttentionBlock(torch.nn.Module):
         return x, present
 
 
-class GPT2Model(torch.nn.Module):
+class Model(torch.nn.Module):
     def __init__(self, d_model, n_head, n_layer, n_context, vocab_size, dropout=0.1):
-        super(GPT2Model, self).__init__()
+        super(Model, self).__init__()
         self.d_model = d_model
         self.n_head = n_head
         self.n_layer = n_layer
@@ -225,49 +225,90 @@ class GPT2Model(torch.nn.Module):
         assert isinstance(x, torch.Tensor), "Input must be a torch.Tensor"
         assert x.dtype == torch.int32, "Input must be of type int32"
         assert x.dim() == 2, "Input must have 2 dimensions"
-        assert past is not None and isinstance(past, torch.Tensor), "past must be a torch.Tensor"
+        # assert past is not None and isinstance(past, torch.Tensor), "past must be a torch.Tensor"
         batch, sequence = x.shape
-        print('GPT2Model x:', x)
+        print('Model x:', x)
         past_length = past.shape[-2] if past is not None else 0
-        print('### GPT2Model past_length:', past_length)
+        print('### Model past_length:', past_length)
 
         positions = self.positions_for(x, past_length)
-        print('### GPT2Model positions:', positions.shape)
+        print('### Model positions:', positions.shape)
 
         tX = self.wte[x]
-        print('### GPT2Model tX:', tX.shape)
+        print('### Model tX:', tX.shape)
         pX = self.wpe[positions]
-        print('### GPT2Model pX:', pX.shape)
+        print('### Model pX:', pX.shape)
         
         h = tX + pX
-        print('### GPT2Model h:', h.shape)
+        print('### Model h:', h.shape)
 
         # Transformer
         presents = []
-        print('### GPT2Model past:', past.shape)
+        # print('### Model past:', past.shape)
         pasts = torch.unbind(past, dim=1) if past is not None else [None] * self.n_layer
-        print('### GPT2Model pasts:', len(pasts))
+        print('### Model pasts:', len(pasts))
 
         assert len(pasts) == self.n_layer, f"Expected {self.n_layer} pasts, got {len(pasts)}"
 
-        for model, past in zip(self.models, pasts):
-            h, present = model(h, past)
+        for model, p in zip(self.models, pasts):
+            h, present = model(h, p)
             presents.append(present)
-        print('### GPT2Model presents:', len(presents))
+        print('### Model presents:', len(presents))
         present = torch.stack(presents, dim=1)
         results = {}
         results['present'] = present
 
         h = self.ln_f(h)
-        print('### GPT2Model h:', h.shape)
+        print('### Model h:', h.shape)
 
         # Language model loss.  Do tokens <n predict token n?
         h_half = torch.reshape(h, [batch * sequence, self.d_model])
-        print('### GPT2Model h_half:', h_half.shape)
-        print('### GPT2Model wte:', self.wte.shape)
+        print('### Model h_half:', h_half.shape)
+        print('### Model wte:', self.wte.shape)
         logits = torch.matmul(h_half, torch.transpose(self.wte, 0, 1))
-        print('### GPT2Model logits:', logits.shape)
+        print('### Model logits:', logits.shape)
         logits = torch.reshape(logits, [batch, sequence, self.vocab_size])
-        print('### GPT2Model logits:', logits.shape)
+        print('### Model logits:', logits.shape)
         results['logits'] = logits
         return results
+
+def get_model(name:str):
+    hparams = {
+        '124M': {
+            'n_embd': 768,
+            'n_head': 12,
+            'n_layer': 12,
+            'n_ctx': 1024,
+            'n_vocab': 50257
+        },
+        '355M': {
+            'n_embd': 1024,
+            'n_head': 16,
+            'n_layer': 24,
+            'n_ctx': 1024,
+            'n_vocab': 50257
+        },
+        '774M': {
+            'n_embd': 1280,
+            'n_head': 20,
+            'n_layer': 36,
+            'n_ctx': 1024,
+            'n_vocab': 50257
+        },
+        '1558M': {
+            'n_embd': 1600,
+            'n_head': 25,
+            'n_layer': 48,
+            'n_ctx': 1024,
+            'n_vocab': 50257
+        },
+    }
+    assert name in hparams, f"Model {name} not found, available models are: {list(hparams.keys())}"
+    params = hparams[name]
+    n_embd = params['n_embd']
+    n_head = params['n_head']
+    n_layer = params['n_layer']
+    n_ctx = params['n_ctx']
+    n_vocab = params['n_vocab']
+    model = Model(n_embd, n_head, n_layer, n_ctx, n_vocab)
+    return model
