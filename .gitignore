@@ -170,6 +170,8 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-compare/
+# compare/
 debug/
 weights/
+*.log
+*.pkl
