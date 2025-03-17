@@ -35,7 +35,7 @@ class Conv1d(torch.nn.Module):
         assert x.dim() >= 2, "Input must have at least 2 dimensions"
 
         *start, _ = x.shape
-        print('Conv1d x:', x.shape, ', start:', start, ', nx:', self.nx, ', nf:', self.nf)
+        # print('Conv1d x:', x.shape, ', start:', start, ', nx:', self.nx, ', nf:', self.nf)
         c = torch.reshape(torch.matmul(torch.reshape(x, [-1, self.nx]), torch.reshape(self.w, [-1, self.nf])) + self.b, start + [self.nf])
         return c
 
@@ -55,9 +55,9 @@ class AttentionLayer(torch.nn.Module):
     def split_states(self, x: torch.Tensor, n):
         """Reshape the last dimension of x into [n, x.shape[-1]/n]."""
         *start, m = x.shape
-        print('split_states x:', x.shape)
+        # print('split_states x:', x.shape)
         out = torch.reshape(x, start + [n, m // n])
-        print('split_states out:', out.shape)
+        # print('split_states out:', out.shape)
         return out
     
     def merge_states(self, x: torch.Tensor):
@@ -69,12 +69,12 @@ class AttentionLayer(torch.nn.Module):
         # From [batch, sequence, features] to [batch, heads, sequence, features]
 
         assert isinstance(x, torch.Tensor), "Input must be a torch.Tensor"
-        print('split_heads x:', x.shape)
+        # print('split_heads x:', x.shape)
 
         c = self.split_states(x, self.n_head)
-        print('split_heads c:', c.shape)
+        # print('split_heads c:', c.shape)
         out = torch.transpose(c, 2, 1)
-        print('split_heads out:', out.shape)
+        # print('split_heads out:', out.shape)
         return out
     
     def merge_heads(self, x: torch.Tensor):
@@ -102,11 +102,11 @@ class AttentionLayer(torch.nn.Module):
     
     def multihead_attn(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor):
         # print('multihead_attn q:', q)
-        print('multihead_attn q:', q.shape)
+        # print('multihead_attn q:', q.shape)
         # print('multihead_attn k:', k)
-        print('multihead_attn k:', k.shape)
+        # print('multihead_attn k:', k.shape)
         # print('multihead_attn v:', v)
-        print('multihead_attn v:', v.shape)
+        # print('multihead_attn v:', v.shape)
         # q, k, v has shape [batch, heads, sequence, features]
         assert isinstance(q, torch.Tensor), "Input must be a torch.Tensor"
         assert isinstance(k, torch.Tensor), "Input must be a torch.Tensor"
@@ -129,34 +129,34 @@ class AttentionLayer(torch.nn.Module):
 
         c = self.c_attn(x)
         # print('forward c:', c)
-        print('forward c:', c.shape)
+        # print('forward c:', c.shape)
         split_size = int(c.shape[-1] / 3)
         q, k, v = map(self.split_heads, torch.split(c, split_size, dim=2))
         # print('forward q:', q)
-        print('forward q:', q.shape)
+        # print('forward q:', q.shape)
         # print('forward k:', k)
-        print('forward k:', k.shape)
+        # print('forward k:', k.shape)
         # print('forward v:', v)
-        print('forward v:', v.shape)
+        # print('forward v:', v.shape)
         present = torch.stack([k, v], dim=1)
-        print('forward present:', present.shape)
+        # print('forward present:', present.shape)
 
         if past is not None:
             # print('forward past:', past)
-            print('forward past:', past.shape)
+            # print('forward past:', past.shape)
             pk, pv = torch.unbind(past, dim=1)
-            print('forward pk:', pk.shape, ', k:', k.shape)
+            # print('forward pk:', pk.shape, ', k:', k.shape)
             k = torch.cat([pk, k], dim=-2)
-            print('forward cat k:', k.shape)
+            # print('forward cat k:', k.shape)
             v = torch.cat([pv, v], dim=-2)
         
         a = self.multihead_attn(q, k, v)
         # print('forward a:', a)
-        print('forward a:', a.shape)
+        # print('forward a:', a.shape)
         a = self.merge_heads(a)
-        print('forward merge_heads a:', a.shape)
+        # print('forward merge_heads a:', a.shape)
         a = self.c_proj(a)
-        print('forward c_proj a:', a.shape)
+        # print('forward c_proj a:', a.shape)
         return a, present
 
 
@@ -172,8 +172,8 @@ class MLPLayer(torch.nn.Module):
 
     def forward(self, x: torch.Tensor):
         assert isinstance(x, torch.Tensor), "Input must be a torch.Tensor"
-        print('MLPLayer c_fc:', self.c_fc.w.shape)
-        print('MLPLayer c_fc:', self.c_fc.b.shape)
+        # print('MLPLayer c_fc:', self.c_fc.w.shape)
+        # print('MLPLayer c_fc:', self.c_fc.b.shape)
         h = self.gelu(self.c_fc(x))
         h2 = self.c_proj(h)
         return h2
@@ -190,8 +190,8 @@ class AttentionBlock(torch.nn.Module):
         assert isinstance(x, torch.Tensor), "Input must be a torch.Tensor"
         # assert past is not None and isinstance(past, torch.Tensor), "past must be a torch.Tensor"
         a, present = self.attn(self.ln_1(x), past)
-        print('AttentionBlock x:', x.shape)
-        print('AttentionBlock a:', a.shape)
+        # print('AttentionBlock x:', x.shape)
+        # print('AttentionBlock a:', a.shape)
         x = x + a
         m = self.mlp(self.ln_2(x))
         x = x + m
@@ -213,7 +213,10 @@ class Model(torch.nn.Module):
 
     def expand_tile(self, value, size):
         """Add a new axis of given size."""
-        value = torch.tensor(value, dtype=torch.int64)
+        if isinstance(value, torch.Tensor):
+            value = value.to(torch.int64)
+        else:
+            value = torch.tensor(value, dtype=torch.int64)
         ndims = len(value.shape)
         return torch.tile(torch.unsqueeze(value, dim=0), [size] + [1] * ndims)
 
@@ -227,48 +230,48 @@ class Model(torch.nn.Module):
         assert x.dim() == 2, "Input must have 2 dimensions"
         # assert past is not None and isinstance(past, torch.Tensor), "past must be a torch.Tensor"
         batch, sequence = x.shape
-        print('Model x:', x)
+        # print('Model x:', x)
         past_length = past.shape[-2] if past is not None else 0
-        print('### Model past_length:', past_length)
+        # print('### Model past_length:', past_length)
 
         positions = self.positions_for(x, past_length)
-        print('### Model positions:', positions.shape)
+        # print('### Model positions:', positions.shape)
 
         tX = self.wte[x]
-        print('### Model tX:', tX.shape)
+        # print('### Model tX:', tX.shape)
         pX = self.wpe[positions]
-        print('### Model pX:', pX.shape)
+        # print('### Model pX:', pX.shape)
         
         h = tX + pX
-        print('### Model h:', h.shape)
+        # print('### Model h:', h.shape)
 
         # Transformer
         presents = []
         # print('### Model past:', past.shape)
         pasts = torch.unbind(past, dim=1) if past is not None else [None] * self.n_layer
-        print('### Model pasts:', len(pasts))
+        # print('### Model pasts:', len(pasts))
 
         assert len(pasts) == self.n_layer, f"Expected {self.n_layer} pasts, got {len(pasts)}"
 
         for model, p in zip(self.models, pasts):
             h, present = model(h, p)
             presents.append(present)
-        print('### Model presents:', len(presents))
+        # print('### Model presents:', len(presents))
         present = torch.stack(presents, dim=1)
         results = {}
         results['present'] = present
 
         h = self.ln_f(h)
-        print('### Model h:', h.shape)
+        # print('### Model h:', h.shape)
 
         # Language model loss.  Do tokens <n predict token n?
         h_half = torch.reshape(h, [batch * sequence, self.d_model])
-        print('### Model h_half:', h_half.shape)
-        print('### Model wte:', self.wte.shape)
+        # print('### Model h_half:', h_half.shape)
+        # print('### Model wte:', self.wte.shape)
         logits = torch.matmul(h_half, torch.transpose(self.wte, 0, 1))
-        print('### Model logits:', logits.shape)
+        # print('### Model logits:', logits.shape)
         logits = torch.reshape(logits, [batch, sequence, self.vocab_size])
-        print('### Model logits:', logits.shape)
+        # print('### Model logits:', logits.shape)
         results['logits'] = logits
         return results
 

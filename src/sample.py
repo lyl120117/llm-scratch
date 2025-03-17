@@ -80,52 +80,78 @@ def sample_sequence(
     print("Encoder loaded successfully.")
 
     raw_text = "Hello, how are you?"
+    print('raw_text:', raw_text)
     context_tokens = encoder.encode(raw_text)
     print("Context tokens:", context_tokens)
 
-    # x = np.random.randint(0, n_vocab, (batch_size, length), dtype=np.int32)
-    # Sample sequences
-    with torch.no_grad():
-        x_tensor = torch.tensor([context_tokens], dtype=torch.int32).to(device)
-        past = None
+    def step(tokens, past=None):
+        assert isinstance(tokens, list) or isinstance(tokens, np.ndarray), "tokens should be a list or numpy array"
+
+        if isinstance(tokens, np.ndarray):
+            tokens = tokens.tolist()
+        # Convert tokens to tensor
+        x_tensor = torch.tensor([tokens], dtype=torch.int32).to(device)
+        # Forward pass
         results = model(x_tensor, past)
         logits = results['logits']
+        present = results['present']
         logits = logits[:, -1, :] / temperature
-        # logits = top_k_logits(logits, top_k)
-        # print('top_k_logits logits:', logits.shape)
-        # logits = top_p_logits(logits, top_p)
-        # print('top_p_logits logits:', logits.shape)
-        present_tensor = results['present']
-        # y_tensor = y_tensor.squeeze(1)
         logits = torch.nn.functional.softmax(logits, dim=-1)
-        print('logits:', logits.shape)
-        # y_tensor = torch.argmax(y_tensor, dim=-1)
-        y_tensor = torch.multinomial(logits, num_samples=1)
-        # present_tensor = present_tensor.squeeze(1)
+        logits = torch.multinomial(logits, num_samples=1)
+        return logits, present
+    
+    def decode(logits: torch.Tensor):
+        y = logits.squeeze(0).detach().cpu().numpy()
+        return encoder.decode(y), y
 
-        # Convert tensors to numpy arrays
-        y = y_tensor.detach().cpu().numpy()
-        present = present_tensor.detach().cpu().numpy()
-        print('raw_text:', raw_text)
-        print('context_tokens:', context_tokens)
-        print('y:', y)
-        text = encoder.decode(y[0])
-        print('Decoded text:', text)
-        print('present:', present.shape)
+    def step_log(i, *msg):
+        print(f"Step {i}: ", *msg)
+
+    texts = []
+    tokens = context_tokens
+    for token in context_tokens:
+        text = encoder.decode([token])
+        texts.append(text)
+    print('texts:', texts)
+    with torch.no_grad():
+        for i in range(length):
+            if i == 0:
+                input_tokens = context_tokens
+                past = None
+            logits, present = step(input_tokens, past)
+
+            # Convert tensors to numpy arrays
+            text, y = decode(logits)
+            step_log(i, 'input_tokens:', input_tokens, 'y:', y, ', text:', text)
+            input_tokens = y
+            if past is None:
+                past = present
+            else:
+                past = torch.cat([past, present], dim=-2)
+            # Append the new token to the context
+            tokens.append(y[0])
+            texts.append(text)
+        print(''.join(texts))
+        print('texts:', texts)
+        print('tokens:', tokens)
 
 
 if __name__ == "__main__":
     # Example usage
-    # name = '124M'
-    name = '1558M'
+    name = '124M'
+    # name = '1558M'
     model_path = f'weights/{name}.pt'
     n_vocab = 50257
-    length = 1
+    length = 10
     start_token = 0
     batch_size = 1
     temperature = 1.0
     top_k = 1
     top_p = 0.95
     device = 'cpu'
+    seed = 421
+    torch.manual_seed(seed)
+    # Set the random seed for reproducibility
+    np.random.seed(seed)
 
     sample_sequence(name, model_path, n_vocab, length, start_token, batch_size, temperature, top_k, top_p, device)
