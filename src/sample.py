@@ -149,6 +149,7 @@ if __name__ == "__main__":
     top_k = 1
     top_p = 0.95
     device = 'cpu'
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
     seed = 421
     torch.manual_seed(seed)
     # Set the random seed for reproducibility

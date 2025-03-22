@@ -85,13 +85,13 @@ class AttentionLayer(torch.nn.Module):
         i = torch.arange(nd)[:, None]
         j = torch.arange(ns)
         m = i >= j - ns + nd
-        return m.to(dtype=dtype)
+        return m.to(dtype=dtype).to(device=self.c_attn.w.device)
 
     def mask_attn_weights(self, w: torch.Tensor):
         _, _, nd, ns = w.shape
         b = self.attention_mask(nd, ns, dtype=w.dtype)
         b = b.reshape(1, 1, nd, ns)
-        w = w * b - torch.tensor(1e10, dtype=w.dtype) * (1 - b)
+        w = w * b - torch.tensor(1e10, dtype=w.dtype, device=w.device) * (1 - b)
         return w
     
     def softmax(self, x: torch.Tensor, dim=-1):
